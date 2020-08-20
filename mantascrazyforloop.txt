@@ -1,0 +1,168 @@
+# K-Fold CV
+
+# Parameters for grid search
+
+# CYCLE PARAMETERS}
+n_folds = 2  # Number of folds for K-fold CV
+epochs = 1  # Number for model training epochs
+batch = 5  # Batch size of the training
+
+# CNN PARAMETERS
+blocks = [2]  # Number of blocks (Conv2D + Pooling layers) in the model, by default 2
+nodes = [512]  # List of the number of nodes for the gridseach
+fcs = [1]  # List of the number of fully connected layers after Flatten in the model
+acts = ["tanh"]  # List of activation functions used in the model
+poolings = ["MAX"]  # List of poolings used in the model (Available options: MAX, AVG)
+opts = ["sgd"]  # List of optimizers used in the model
+# structure = "cnn"
+kernel_sizes =[(3,3)] # Format to enter (3,3) 
+pool_sizes = [(5,5)] # Format to enter (5,5) 
+drop_probs = [0.2] # Format to enter 0.2
+paddings = ["valid"] # Available choose between same and valid
+filters = [128] # Numbers of filters Best results were obtained with 128 filters
+
+# AUGMENTATION PARAMETERS
+rotations = [0,15]
+shears = [0, 0.1]
+zooms = [0, 0.2]
+flips = [True, False]
+wsrs = [0, 0.1]
+hsrs = [0, 0.1]
+zcas = [False, True]
+
+information = True  # If True print completed model parameters and average accuracy for folds
+
+# prepare cross validation
+kfold = KFold(n_folds, shuffle=True, random_state=1)
+splits = kfold.split(train_df)
+
+# Prepare DataFrame for results saving
+Results = pd.DataFrame(columns=["Optimizer","Pooling", "Fully Connected", "Activation", "Blocks",
+                                "Filters","Padding","Kernel Size","Pool Size","Node", "Rotation","Shear",
+                                "Zoom","Flip","WSR","HSR","ZCA", "AVG Train",
+                                "AVG Valid", "AVG Test", "Time"])
+
+
+for o in opts:
+    for pool in poolings:
+        for fc in fcs:
+            for act in acts:
+                for block in blocks:
+                    for filters_no in filters:
+                        for pad in paddings:
+                            for ks in kernel_sizes:
+                                for ps in pool_sizes:
+                                    for dp in drop_probs:
+                                        for n in nodes:
+                                            
+                                            # DATA AUGMENTATION LOOPS
+                                            for rotate in rotations:
+                                                for shear in shears:
+                                                    for zoom in zooms:
+                                                        for flip in flips:
+                                                            for wsr in wsrs:
+                                                                for hsr in hsrs:
+                                                                    for zca in zcas:
+                                                                        start = time()
+                                                                        avg_train_acc = 0
+                                                                        avg_val_acc = 0
+                                                                        avg_test_acc = 0
+
+                                                                        print("*******************************************************************")
+                                                                        print("Model creation is started")
+                                                                        print("*******************************************************************")
+
+
+                                                                        train_datagen = ImageDataGenerator(
+                                                                            rotation_range=rotate,
+                                                                            rescale=1./255,
+                                                                            shear_range=shear,
+                                                                            zoom_range=zoom,
+                                                                            horizontal_flip=flip,
+                                                                            width_shift_range=wsr,
+                                                                            height_shift_range=hsr,
+                                                                            zca_whitening = zca
+                                                                        )
+
+                                                                        for train_ix, test_ix in kfold.split(train_df):
+
+                                                                            model = define_model(
+                                                                                nodes=n,
+                                                                                loss='binary_crossentropy',
+                                                                                opt=o,
+                                                                                pooling=pool,
+                                                                                dropout=False,
+                                                                                fc=fc,
+                                                                                act=act,
+                                                                                blocks=block,
+                                                                                filters_no = filters_no,
+                                                                                padding = pad,
+                                                                                kernel_size = ks,
+                                                                                pool_size= ps,
+                                                                                dropout_prob = dp)
+
+                                                                            train_generator = train_datagen.flow_from_dataframe(
+                                                                                train_df.iloc[train_ix],
+                                                                                directory,
+                                                                                x_col='filename',
+                                                                                y_col='category',
+                                                                                target_size=IMAGE_SIZE,
+                                                                                class_mode='categorical',
+                                                                                batch_size=batch_size
+                                                                            )
+
+                                                                            validation_generator = train_datagen.flow_from_dataframe(
+                                                                                train_df.iloc[test_ix],
+                                                                                directory,
+                                                                                x_col='filename',
+                                                                                y_col='category',
+                                                                                target_size=IMAGE_SIZE,
+                                                                                class_mode='categorical',
+                                                                                batch_size=batch_size
+                                                                            )
+
+                                                                            history = model.fit(
+                                                                                train_generator,
+                                                                                verbose=2,
+                                                                                epochs=epochs,
+                                                                                validation_data=validation_generator,
+                                                                                callbacks=callbacks
+                                                                            )
+
+                                                                            _, acc = model.evaluate(train_generator)
+                                                                            print(f"Training Acc: {acc}")
+                                                                            avg_train_acc = avg_train_acc + acc
+
+                                                                            _, acc = model.evaluate(validation_generator)
+                                                                            print(f"Validation Acc: {acc}")
+                                                                            avg_val_acc = avg_val_acc + acc
+
+                                                                            _, acc = model.evaluate(test_generator)
+                                                                            print(f"Test Acc: {acc}")
+                                                                            avg_test_acc = avg_test_acc + acc
+
+                                                                            K.clear_session()
+                                                                            gc.collect()
+
+                                                                        Results = Results.append({"Optimizer": o,
+                                                                                                  "Pooling" : pool,
+                                                                                                  "Fully Connected": fc,
+                                                                                                  "Activation": act,
+                                                                                                  "Blocks": block,
+                                                                                                  "Filters": filters_no,
+                                                                                                  "Padding": pad,
+                                                                                                  "Kernel Size": ks,
+                                                                                                  "Pool Size": ps,
+                                                                                                  "Node": n,
+                                                                                                  "Rotation": rotate,
+                                                                                                  "Shear": shear,
+                                                                                                  "Zoom": zoom,
+                                                                                                  "Flip": flip,
+                                                                                                  "WSR": wsr,
+                                                                                                  "HSR": hsr,
+                                                                                                  "ZCA": zca,
+                                                                                                  "AVG Train": avg_train_acc / n_folds,
+                                                                                                  "AVG Valid": avg_val_acc / n_folds,
+                                                                                                  "AVG Test": avg_test_acc / n_folds,
+                                                                                                  "Time": time() - start},
+                                                                                                 ignore_index=True)

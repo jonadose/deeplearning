@@ -1,0 +1,2 @@
+,Optimizer,Fully Connected,Activation,Blocks,Node,AVG Train,AVG Valid,AVG Test,Time
+0,sgd,2,tanh,2,512,0.8030555605888366,0.7781481623649598,0.8126666665077209,1128.7987611293793
